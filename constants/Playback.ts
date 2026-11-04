@@ -46,3 +46,14 @@ export const NEXT_EPISODE_COUNTDOWN_MS = 10_000;
  * settles would hold every later report, the Stop included.
  */
 export const PLAYBACK_REPORT_TIMEOUT_MS = 15_000;
+
+/**
+ * How long the native player may spend fetching an item's sidecar subtitles
+ * onto disk before starting playback, in ms, and the cap for one subtitle.
+ * A subtitle the engine fetches itself wedges the whole pipeline on a slow
+ * path (ExoPlayer #8566), so the player prefetches them; these bound how long
+ * that may delay the start and stop one dead sidecar starving the rest. A
+ * subtitle that misses the budget is undelivered for the session.
+ */
+export const SUBTITLE_PREFETCH_BUDGET_MS = 6_000;
+export const SUBTITLE_PREFETCH_PER_SUBTITLE_MS = 3_000;
