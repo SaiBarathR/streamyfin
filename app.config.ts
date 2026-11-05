@@ -3,6 +3,7 @@
 import "tsx/cjs";
 import { execFileSync } from "node:child_process";
 import type { ConfigContext, ExpoConfig } from "expo/config";
+import { applyForkVariant, isForkVariant } from "./plugins/forkVariant";
 
 // Build metadata, injected into `extra.build` and read at runtime via
 // expo-constants (see utils/version.ts). Sources in priority order:
@@ -95,8 +96,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
 
   config.extra = { ...config.extra, build: buildMeta };
 
-  return {
+  const resolved = {
     ...(Object.keys(androidConfig).length > 0 && { android: androidConfig }),
     ...config,
   } as ExpoConfig;
+
+  // APP_VARIANT=fork: the personal fork, installable next to the store app.
+  return isForkVariant() ? applyForkVariant(resolved) : resolved;
 };

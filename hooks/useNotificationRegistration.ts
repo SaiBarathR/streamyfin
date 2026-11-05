@@ -1,3 +1,4 @@
+import Constants from "expo-constants";
 import * as Device from "expo-device";
 import type { EventSubscription } from "expo-modules-core";
 import type {
@@ -26,6 +27,16 @@ import { writeErrorLog, writeInfoLog, writeToLog } from "@/utils/log";
 import { storage } from "@/utils/mmkv";
 import { offerSettingsLinkOnce } from "@/utils/notificationPermissions";
 import { isPlainTap, notificationRoute } from "@/utils/notificationRoute";
+
+/**
+ * Whether this build can receive push at all. A fork's build has no Firebase
+ * project (plugins/forkVariant.ts sets extra.pushNotifications to false), so
+ * asking for a token only fails, on every launch. Local notifications, the
+ * download ones among them, are unaffected.
+ */
+export const pushNotificationsAvailable = (
+  extra: Record<string, unknown> | undefined = Constants.expoConfig?.extra,
+): boolean => extra?.pushNotifications !== false;
 
 /**
  * Asks for notifications once per install, and says whether they are allowed.
@@ -220,8 +231,13 @@ export const useNotificationRegistration = (): ExpoPushToken | undefined => {
         await registerBackgroundFetchAsyncSessions();
       }
 
-      // only create push token for real devices (pointless for emulators)
-      if (Device.isDevice && tokenFetch.current === "idle") {
+      // only create push token for real devices (pointless for emulators),
+      // and only in a build that has a push project.
+      if (
+        pushNotificationsAvailable() &&
+        Device.isDevice &&
+        tokenFetch.current === "idle"
+      ) {
         tokenFetch.current = "pending";
         Notifications.getExpoPushTokenAsync({
           projectId: EXPO_PROJECT_ID,
