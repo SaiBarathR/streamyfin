@@ -94,10 +94,12 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     private var mediaPlayback: MediaPlaybackController? = null
     private var nowPlaying: NowPlayingInfo? = null
     private var isLoadingMedia = false
+    // mpv keeps its last pause state after a failed load or stream.
+    private var playbackFailed = false
     private var playbackSpeedValue = 1.0
 
     private val mediaPlaybackTarget = object : MediaPlaybackTarget {
-        override val isPlaying get() = rendererStarted && !isPaused()
+        override val isPlaying get() = rendererStarted && !playbackFailed && !isPaused()
         override val isBuffering get() = isLoadingMedia
         override val positionSeconds get() = cachedPosition
         override val durationSeconds get() = cachedDuration
@@ -307,6 +309,7 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     private fun loadVideoInternal(config: VideoLoadConfig) {
         currentUrl = config.url
         currentLoop = config.loop
+        playbackFailed = false
         ensureMediaPlayback()
 
         renderer?.load(config)
@@ -389,7 +392,6 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     fun destroy() {
         renderer?.stop()
         isLoadingMedia = false
-        mediaPlayback?.updatePlaybackState()
 
         // Reset view-level state so a subsequent loadVideo() on the SAME view
         // instance re-creates the mpv handle and re-attaches the still-live
@@ -412,6 +414,10 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
         pendingConfig = null
         currentUrl = null
         activeSurface = null
+        // After rendererStarted: the renderer keeps its last pause state, so
+        // the session would otherwise go on saying "playing" and hold the
+        // wake lock until the next load.
+        mediaPlayback?.updatePlaybackState()
     }
 
     fun seekTo(position: Double) {
@@ -622,6 +628,9 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     }
 
     override fun onError(message: String) {
+        isLoadingMedia = false
+        playbackFailed = true
+        mediaPlayback?.updatePlaybackState()
         onError(mapOf("error" to message))
     }
 

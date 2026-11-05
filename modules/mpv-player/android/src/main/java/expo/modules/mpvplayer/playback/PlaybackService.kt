@@ -37,6 +37,9 @@ class PlaybackService : Service() {
 
         @Volatile private var owner: MediaPlaybackController? = null
         @Volatile private var running = false
+        // A start sent but not answered yet: stopping the service now would
+        // kill the process, so onStartCommand answers it and stops instead.
+        @Volatile private var startPending = false
 
         fun attach(context: Context, controller: MediaPlaybackController) {
             owner = controller
@@ -49,8 +52,10 @@ class PlaybackService : Service() {
             }
             val intent = Intent(context, PlaybackService::class.java).setAction(ACTION_START)
             try {
+                startPending = true
                 ContextCompat.startForegroundService(context, intent)
             } catch (e: Exception) {
+                startPending = false
                 // ForegroundServiceStartNotAllowedException: the app is not
                 // visible. Playback still works on screen, only the
                 // background protection is missing.
@@ -72,6 +77,10 @@ class PlaybackService : Service() {
             // A newer player already took over: leave its service alone.
             if (owner !== controller) return
             owner = null
+            // The next owner must start the service again rather than post to
+            // one that is going away.
+            running = false
+            if (startPending) return
             context.stopService(Intent(context, PlaybackService::class.java))
         }
 
@@ -90,6 +99,7 @@ class PlaybackService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startPending = false
         val controller = owner
         // Answer every start with startForeground() before anything else, even
         // when about to stop: a start left unanswered kills the process (see
@@ -101,7 +111,7 @@ class PlaybackService : Service() {
             } else {
                 startForeground(NOTIFICATION_ID, notification)
             }
-            running = true
+            running = controller != null
         } catch (e: Exception) {
             Log.w(TAG, "startForeground refused: ${e.message}")
         }

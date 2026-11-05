@@ -175,8 +175,7 @@ class MediaPlaybackController(
             PlaybackState.ACTION_SEEK_TO or
             PlaybackState.ACTION_FAST_FORWARD or
             PlaybackState.ACTION_REWIND or
-            PlaybackState.ACTION_SKIP_TO_PREVIOUS or
-            PlaybackState.ACTION_STOP
+            PlaybackState.ACTION_SKIP_TO_PREVIOUS
         if (target.canSkipToNext) actions = actions or PlaybackState.ACTION_SKIP_TO_NEXT
 
         session.setPlaybackState(
@@ -490,15 +489,13 @@ class MediaPlaybackController(
         }
     }
 
+    // HIGH_PERF, as Media3's WifiLockManager: LOW_LATENCY only holds while
+    // the screen is on and the app in front, the opposite of what this is for.
     @Suppress("DEPRECATION")
     private fun createWifiLock(): WifiManager.WifiLock? {
         val wifi = context.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return null
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            WifiManager.WIFI_MODE_FULL_LOW_LATENCY
-        } else {
-            WifiManager.WIFI_MODE_FULL_HIGH_PERF
-        }
-        return wifi.createWifiLock(mode, "streamyfin:playback").apply { setReferenceCounted(false) }
+        return wifi.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "streamyfin:playback")
+            .apply { setReferenceCounted(false) }
     }
 
     private fun releaseLocks() {
