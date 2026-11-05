@@ -177,3 +177,36 @@ test("leaves the build number alone outside a repack", () => {
   } as ConfigContext);
   expect(resolved.ios?.buildNumber).toBe(appJson.expo.ios?.buildNumber);
 });
+
+/** The resolved config with APP_VARIANT set to the given value (or unset). */
+const resolvedWithVariant = (variant: string | undefined) => {
+  const previous = process.env.APP_VARIANT;
+  if (variant === undefined) delete process.env.APP_VARIANT;
+  else process.env.APP_VARIANT = variant;
+  try {
+    return resolveConfig({
+      config: structuredClone(appJson.expo),
+    } as ConfigContext);
+  } finally {
+    if (previous === undefined) delete process.env.APP_VARIANT;
+    else process.env.APP_VARIANT = previous;
+  }
+};
+
+test("builds the store app unless the fork variant is asked for", () => {
+  const config = resolvedWithVariant(undefined);
+  expect(config.android?.package).toBe(appJson.expo.android.package);
+  expect(config.android?.googleServicesFile).toBe(
+    appJson.expo.android.googleServicesFile,
+  );
+  expect(config.extra?.pushNotifications).toBeUndefined();
+});
+
+test("APP_VARIANT=fork builds the fork under its own id, without Firebase", () => {
+  const config = resolvedWithVariant("fork");
+  expect(config.android?.package).toBe("com.saibarath.streamyfin");
+  expect(config.name).toBe("Streamyfin Dev");
+  expect(config.android).not.toHaveProperty("googleServicesFile");
+  expect(config.extra?.pushNotifications).toBe(false);
+  expect(config.plugins).toContain("./plugins/withForkReleaseSigning.ts");
+});

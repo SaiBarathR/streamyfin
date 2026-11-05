@@ -325,3 +325,17 @@ test("does nothing on TV", async () => {
   ).not.toHaveBeenCalled();
   expect(mockNotifications.getPermissionsAsync).not.toHaveBeenCalled();
 });
+
+describe("pushNotificationsAvailable", () => {
+  // A fork's build has no Firebase project: asking for a token only fails.
+  test("is off in a build that says it has no push project", () => {
+    const { pushNotificationsAvailable } = jest.requireActual(
+      "./useNotificationRegistration",
+    );
+    expect(pushNotificationsAvailable({ pushNotifications: false })).toBe(
+      false,
+    );
+    expect(pushNotificationsAvailable({})).toBe(true);
+    expect(pushNotificationsAvailable(undefined)).toBe(true);
+  });
+});
