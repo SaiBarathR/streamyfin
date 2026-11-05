@@ -18,6 +18,9 @@ import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import expo.modules.mpvplayer.nativeplayer.engine.PlayerEngine
 import expo.modules.mpvplayer.nativeplayer.engine.VideoLoadConfig
+import expo.modules.mpvplayer.playback.MediaPlaybackController
+import expo.modules.mpvplayer.playback.MediaPlaybackTarget
+import expo.modules.mpvplayer.playback.NowPlayingInfo
 
 /**
  * MpvPlayerView - ExpoView that hosts the MPV player.
@@ -82,6 +85,32 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     private var lifecycleCallbacks: Application.ActivityLifecycleCallbacks? = null
     private var lifecycleRegistered = false
     private val recoverResumeRunnable = Runnable { runResumeRecovery() }
+
+    // Background playback: media session, notification and the media
+    // playback foreground service (see MediaPlaybackController). Created on
+    // the first load, while the app is visible, and kept across destroy() so
+    // the next episode loaded into this view with the screen off still has
+    // it; released when the view leaves the window.
+    private var mediaPlayback: MediaPlaybackController? = null
+    private var nowPlaying: NowPlayingInfo? = null
+    private var isLoadingMedia = false
+    private var playbackSpeedValue = 1.0
+
+    private val mediaPlaybackTarget = object : MediaPlaybackTarget {
+        override val isPlaying get() = rendererStarted && !isPaused()
+        override val isBuffering get() = isLoadingMedia
+        override val positionSeconds get() = cachedPosition
+        override val durationSeconds get() = cachedDuration
+        // Cached: getSpeed() is a synchronous mpv property read.
+        override val playbackSpeed get() = playbackSpeedValue
+        override val isNetworkSource get() = currentUrl?.startsWith("http", ignoreCase = true) == true
+        override val nowPlaying get() = this@MpvPlayerView.nowPlaying
+
+        override fun play() = this@MpvPlayerView.play()
+        override fun pause() = this@MpvPlayerView.pause()
+        override fun seekTo(seconds: Double) = this@MpvPlayerView.seekTo(seconds)
+        override fun seekBy(seconds: Double) = this@MpvPlayerView.seekBy(seconds)
+    }
 
     init {
         setBackgroundColor(Color.BLACK)
@@ -278,6 +307,7 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     private fun loadVideoInternal(config: VideoLoadConfig) {
         currentUrl = config.url
         currentLoop = config.loop
+        ensureMediaPlayback()
 
         renderer?.load(config)
 
@@ -291,6 +321,38 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     // Convenience method for simple loads
     fun loadVideo(url: String, headers: Map<String, String>? = null) {
         loadVideo(VideoLoadConfig(url = url, headers = headers))
+    }
+
+    // MARK: - Background playback
+
+    private fun ensureMediaPlayback() {
+        if (mediaPlayback != null) return
+        mediaPlayback = MediaPlaybackController(context, mediaPlaybackTarget, "StreamyfinPlayer").also {
+            it.start()
+        }
+    }
+
+    /** Now Playing metadata from JS, for the notification and lock screen. */
+    fun setNowPlayingMetadata(metadata: Map<String, Any?>?) {
+        nowPlaying = metadata?.let {
+            @Suppress("UNCHECKED_CAST")
+            NowPlayingInfo(
+                title = (it["title"] as? String)?.takeIf { t -> t.isNotBlank() } ?: "Streamyfin",
+                subtitle = (it["artist"] as? String)?.takeIf { a -> a.isNotBlank() },
+                album = (it["albumTitle"] as? String)?.takeIf { a -> a.isNotBlank() },
+                artworkUri = (it["artworkUri"] as? String)?.takeIf { a -> a.isNotBlank() },
+                artworkHeaders = (it["artworkHeaders"] as? Map<String, Any?>)
+                    ?.mapNotNull { (k, v) -> (v as? String)?.let { value -> k to value } }
+                    ?.toMap(),
+            )
+        }
+        mediaPlayback?.updateMetadata()
+    }
+
+    private fun releaseMediaPlayback() {
+        mediaPlayback?.release()
+        mediaPlayback = null
+        isLoadingMedia = false
     }
 
     // MARK: - Playback Controls
@@ -326,6 +388,8 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
      */
     fun destroy() {
         renderer?.stop()
+        isLoadingMedia = false
+        mediaPlayback?.updatePlaybackState()
 
         // Reset view-level state so a subsequent loadVideo() on the SAME view
         // instance re-creates the mpv handle and re-attaches the still-live
@@ -360,6 +424,8 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
 
     fun setSpeed(speed: Double) {
         renderer?.setSpeed(speed)
+        playbackSpeedValue = speed
+        mediaPlayback?.updatePlaybackState()
     }
 
     /** Mute the player itself; the device volume is left untouched. */
@@ -520,10 +586,12 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
             "progress" to if (duration > 0) position / duration else 0.0,
             "cacheSeconds" to cacheSeconds
         ))
+        mediaPlayback?.onPositionTick()
     }
 
     override fun onPauseChanged(isPaused: Boolean) {
         pipController?.setPlaybackRate(if (isPaused) 0.0 else 1.0)
+        mediaPlayback?.updatePlaybackState()
 
         onPlaybackStateChange(mapOf(
             "isPaused" to isPaused,
@@ -532,6 +600,8 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
     }
 
     override fun onLoadingChanged(isLoading: Boolean) {
+        isLoadingMedia = isLoading
+        mediaPlayback?.updatePlaybackState()
         onPlaybackStateChange(mapOf(
             "isLoading" to isLoading
         ))
@@ -676,6 +746,7 @@ class MpvPlayerView(context: Context, appContext: AppContext) : ExpoView(context
      */
     fun cleanup() {
         pipHandler.removeCallbacksAndMessages(null)
+        releaseMediaPlayback()
         unregisterLifecycleCallbacks()
         pipController?.stopPictureInPicture()
         renderer?.stop()
