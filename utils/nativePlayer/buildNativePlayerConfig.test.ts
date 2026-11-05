@@ -169,3 +169,70 @@ describe("the native player's exit confirmation", () => {
     expect(await confirmExit(false)).toBe(false);
   });
 });
+
+describe("the native player's gestures", () => {
+  const gestureOptions = async (gestureSettings: Partial<Settings>) => {
+    jest.mocked(getStreamUrl).mockResolvedValue({
+      url: `${SERVER}/Videos/1/stream.mkv`,
+      sessionId: "session-1",
+      mediaSource: { Id: "source-1", MediaStreams: [] },
+    } as Awaited<ReturnType<typeof getStreamUrl>>);
+
+    const built = await buildNativePlayerConfig({
+      api,
+      userId: "user-1",
+      settings: {
+        playbackSpeedPerShow: {},
+        playbackSpeedPerMedia: {},
+        enableHorizontalSwipeSkip: true,
+        enableLeftSideBrightnessSwipe: true,
+        enableRightSideVolumeSwipe: true,
+        enableHoldToSpeed: true,
+        enablePinchToZoom: true,
+        enableDoubleTapToSeek: true,
+        ...gestureSettings,
+      } as Settings,
+      req: { itemId: "item-1", offline: false },
+      getDownloadedItemById: () => undefined,
+      strings: {} as NativePlayerStrings,
+      originalLabel: "Original",
+      item,
+    });
+    const ui = built?.config.ui;
+    return {
+      horizontalSwipeSeekEnabled: ui?.horizontalSwipeSeekEnabled,
+      brightnessSwipeEnabled: ui?.brightnessSwipeEnabled,
+      volumeSwipeEnabled: ui?.volumeSwipeEnabled,
+      holdToSpeedEnabled: ui?.holdToSpeedEnabled,
+      pinchToZoomEnabled: ui?.pinchToZoomEnabled,
+      doubleTapToSeekEnabled: ui?.doubleTapToSeekEnabled,
+    };
+  };
+
+  // Before, the swipe switches never reached the native player: its drags
+  // scrubbed and changed brightness and volume whatever they said.
+  test("hands each swipe switch to the player", async () => {
+    expect(
+      await gestureOptions({
+        enableHorizontalSwipeSkip: false,
+        enableLeftSideBrightnessSwipe: false,
+        enableRightSideVolumeSwipe: true,
+      }),
+    ).toMatchObject({
+      horizontalSwipeSeekEnabled: false,
+      brightnessSwipeEnabled: false,
+      volumeSwipeEnabled: true,
+    });
+  });
+
+  test("turns every gesture off with the master switch", async () => {
+    expect(await gestureOptions({ enablePlayerGestures: false })).toEqual({
+      horizontalSwipeSeekEnabled: false,
+      brightnessSwipeEnabled: false,
+      volumeSwipeEnabled: false,
+      holdToSpeedEnabled: false,
+      pinchToZoomEnabled: false,
+      doubleTapToSeekEnabled: false,
+    });
+  });
+});

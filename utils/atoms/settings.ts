@@ -493,6 +493,8 @@ export type Settings = {
   // MPV video output driver (Android only)
   mpvVoDriver?: MpvVoDriver;
   // Gesture controls
+  /** Master switch: false turns off every player gesture below; a tap still toggles the controls. */
+  enablePlayerGestures: boolean;
   enableHorizontalSwipeSkip: boolean;
   enableLeftSideBrightnessSwipe: boolean;
   enableRightSideVolumeSwipe: boolean;
@@ -689,6 +691,7 @@ export const defaultValues: Settings = {
   // MPV video output driver defaults (Android only)
   mpvVoDriver: "gpu-next",
   // Gesture controls
+  enablePlayerGestures: true,
   enableHorizontalSwipeSkip: true,
   enableLeftSideBrightnessSwipe: true,
   enableRightSideVolumeSwipe: true,
