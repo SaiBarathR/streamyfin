@@ -27,6 +27,7 @@ import * as ScreenOrientation from "@/packages/expo-screen-orientation";
 import { apiAtom } from "@/utils/atoms/api";
 import { isExpectedError } from "@/utils/errors";
 import { logAndCaptureError, writeInfoLog } from "@/utils/log";
+import { GESTURE_DEFAULTS } from "@/utils/playerGestures";
 import {
   coerceStillWatchingPreset,
   stillWatchingPresetFromEpisodeCount,
@@ -495,6 +496,8 @@ export type Settings = {
   /** Android: stop decoding video while the screen is off or the app is hidden; audio plays on. */
   audioOnlyWhenScreenOff: boolean;
   // Gesture controls
+  /** Master switch: false turns off every player gesture below; a tap still toggles the controls. */
+  enablePlayerGestures: boolean;
   enableHorizontalSwipeSkip: boolean;
   enableLeftSideBrightnessSwipe: boolean;
   enableRightSideVolumeSwipe: boolean;
@@ -698,13 +701,8 @@ export const defaultValues: Settings = {
   mpvVoDriver: "gpu-next",
   audioOnlyWhenScreenOff: true,
   // Gesture controls
-  enableHorizontalSwipeSkip: true,
-  enableLeftSideBrightnessSwipe: true,
-  enableRightSideVolumeSwipe: true,
-  enableHoldToSpeed: true,
+  ...GESTURE_DEFAULTS,
   holdToSpeedRate: 2.0,
-  enablePinchToZoom: true,
-  enableDoubleTapToSeek: false,
   hideVolumeSlider: false,
   hideBrightnessSlider: false,
   usePopularPlugin: true,
